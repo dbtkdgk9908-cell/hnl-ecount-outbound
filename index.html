@@ -241,9 +241,34 @@
   details.mgmt > summary::-webkit-details-marker{display:none;}
   details.mgmt > summary .chev{transition:transform .15s ease;color:var(--ink-dim);}
   details.mgmt[open] > summary .chev{transform:rotate(90deg);}
-  .mgmt-body{border-top:1px solid var(--border);}
+  .mgmt-legend{
+    display:grid;grid-template-columns:1fr 1fr 62px auto;gap:10px;
+    padding:9px 18px 0;border-top:1px solid var(--border);
+    font-size:11px;font-weight:700;color:var(--ink-dim);
+    letter-spacing:.03em;text-transform:uppercase;
+  }
+  .mgmt-legend span:last-child{min-width:96px;}
+  .flavor-mgmt-legend{grid-template-columns:1fr 62px auto;}
+  .flavor-mgmt-add{
+    display:grid;grid-template-columns:1fr 62px auto;gap:10px;align-items:center;
+    padding:14px 18px 0;
+  }
+  .flavor-mgmt-add input{
+    font:inherit;font-size:13px;padding:7px 10px;border-radius:7px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--ink);width:100%;
+  }
+  .flavor-mgmt-add input#flavor-add-priority{text-align:center;padding:7px 4px;}
+  .flavor-mgmt-row{
+    display:grid;grid-template-columns:1fr 62px auto;gap:10px;align-items:center;
+    padding:10px 18px;border-bottom:1px solid var(--border);font-size:13px;
+  }
+  .flavor-mgmt-row:last-child{border-bottom:none;}
+  .flavor-mgmt-row input{
+    font:inherit;font-size:13px;padding:6px 4px;border-radius:7px;text-align:center;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--ink);width:100%;
+  }
   .mgmt-row{
-    display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:center;
+    display:grid;grid-template-columns:1fr 1fr 62px auto;gap:10px;align-items:center;
     padding:10px 18px;border-bottom:1px solid var(--border);font-size:13px;
   }
   .mgmt-row:last-child{border-bottom:none;}
@@ -251,6 +276,14 @@
   .mgmt-row input{
     font:inherit;font-size:13px;padding:6px 9px;border-radius:7px;
     border:1px solid var(--border);background:var(--surface-2);color:var(--ink);width:100%;
+  }
+  .mgmt-row input.mgmt-priority{
+    text-align:center;padding:6px 4px;
+    -moz-appearance:textfield;
+  }
+  .mgmt-row input.mgmt-priority::-webkit-outer-spin-button,
+  .mgmt-row input.mgmt-priority::-webkit-inner-spin-button{
+    -webkit-appearance:none;margin:0;
   }
   .mgmt-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;}
   .confirm-text{font-size:12px;color:var(--danger);font-weight:700;margin-right:2px;}
@@ -343,6 +376,9 @@
     .stats{grid-template-columns:1fr;}
     .pending-item{grid-template-columns:1fr;}
     .mgmt-row{grid-template-columns:1fr;}
+    .mgmt-legend{display:none;}
+    .flavor-mgmt-row{grid-template-columns:1fr;}
+    .flavor-mgmt-add{grid-template-columns:1fr;}
     .cal-title{min-width:0;}
   }
 
@@ -455,25 +491,47 @@
         </div>
       </section>
 
-      <section class="print-hide">
-        <details class="mgmt" id="mgmt-details">
-          <summary>
-            <span>상품명 매핑 관리 (<span id="mgmt-count">0</span>)</span>
-            <span class="chev">›</span>
-          </summary>
-          <div class="mgmt-body" id="mgmt-body"></div>
-          <div class="mgmt-backup">
-            <div class="desc">매핑·기록 데이터를 파일로 백업하거나 불러올 수 있어요.</div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn sm" id="export-btn">내보내기</button>
-              <button class="btn sm" id="import-btn">가져오기</button>
-              <input type="file" id="import-input" accept=".json" style="display:none;">
-            </div>
-          </div>
-        </details>
-      </section>
-
     </div>
+
+    <section class="mgmt-section print-hide">
+      <details class="mgmt" id="mgmt-details">
+        <summary>
+          <span>상품명 매핑 관리 (<span id="mgmt-count">0</span>)</span>
+          <span class="chev">›</span>
+        </summary>
+        <div class="mgmt-legend">
+          <span>원본 상품명</span><span>이카운트 상품명</span><span>순위</span><span></span>
+        </div>
+        <div class="mgmt-body" id="mgmt-body"></div>
+        <div class="mgmt-backup">
+          <div class="desc">매핑·기록 데이터를 파일로 백업하거나 불러올 수 있어요.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn sm" id="export-btn">내보내기</button>
+            <button class="btn sm" id="import-btn">가져오기</button>
+            <input type="file" id="import-input" accept=".json" style="display:none;">
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section class="mgmt-section print-hide">
+      <details class="mgmt" id="flavor-mgmt-details">
+        <summary>
+          <span>향 우선순위 관리 (<span id="flavor-mgmt-count">0</span>)</span>
+          <span class="chev">›</span>
+        </summary>
+        <div class="flavor-mgmt-add">
+          <input type="text" id="flavor-add-name" placeholder="향 이름 (예: 시그니처우디)">
+          <input type="number" id="flavor-add-priority" placeholder="순위">
+          <button class="btn sm primary" id="flavor-add-btn">추가</button>
+        </div>
+        <div class="mgmt-legend flavor-mgmt-legend">
+          <span>향 이름</span><span>순위</span><span></span>
+        </div>
+        <div class="mgmt-body" id="flavor-mgmt-body"></div>
+      </details>
+    </section>
+
   </div>
 
   <div id="tab-calendar" style="display:none;">
@@ -516,6 +574,7 @@
   var state = {
     db: null,
     mappings: new Map(),  // id -> {rawProduct, setCount, finalProduct, updatedAt}
+    flavorPriorities: new Map(), // id -> {flavor, priority, updatedAt}
     logs: new Map(),      // 'YYYY-MM-DD' -> {date, completed, completedAt, combos, qty}
     rows: [],
     searchTerm: "",
@@ -524,6 +583,16 @@
   };
   var LS_PREFIX = "ecount_outbound_";
   var collator = new Intl.Collator('ko-KR');
+
+  // ---------- mapping priority (lower number = shown first; unset sorts last) ----------
+  function priorityRank(p){
+    return (p===undefined || p===null || p==='') ? Infinity : Number(p);
+  }
+  function comparePriorityThenName(aPriority, aName, bPriority, bName){
+    var ra = priorityRank(aPriority), rb = priorityRank(bPriority);
+    if (ra !== rb) return ra - rb;
+    return collator.compare(aName, bName);
+  }
   var WEEKDAY_LABELS = ['일','월','화','수','목','금','토'];
   var MONTH_LABELS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
@@ -574,6 +643,13 @@
   }
   function mappingId(rawProduct, setCount){
     return 'm' + hashKey(rawProduct + '|' + setCount);
+  }
+  function flavorPriorityId(flavor){
+    return 'f' + hashKey(String(flavor).trim());
+  }
+  function getFlavorPriority(flavor){
+    var entry = state.flavorPriorities.get(flavorPriorityId(flavor));
+    return entry ? entry.priority : undefined;
   }
 
   // ---------- local storage fallback ----------
@@ -646,7 +722,8 @@
       state.db = firebase.firestore();
       dot.className = 'dot on';
       statusEl.textContent = '매핑·출고 기록이 모든 기기에서 공유되어 자동 저장됩니다';
-      store.subscribe('mappings', function(map){ state.mappings = map; renderProcessTab(); renderCalendar(); });
+      store.subscribe('mappings', function(map){ state.mappings = map; renderProcessTab(); renderMgmt(); renderCalendar(); });
+      store.subscribe('flavorPriorities', function(map){ state.flavorPriorities = map; renderProcessTab(); renderFlavorMgmt(); });
       store.subscribe('logs', function(map){ state.logs = map; renderCalendar(); });
       renderCalendar();
       return;
@@ -656,7 +733,10 @@
     dot.className = 'dot off';
     statusEl.textContent = '서버 연결에 실패해 이 브라우저에만 임시 저장됩니다';
     state.mappings = lsLoadAll('mappings');
+    state.flavorPriorities = lsLoadAll('flavorPriorities');
     state.logs = lsLoadAll('logs');
+    renderMgmt();
+    renderFlavorMgmt();
     renderCalendar();
   }
 
@@ -811,12 +891,98 @@
     });
   }
 
-  async function saveMapping(id, rawProduct, setCount, finalProduct){
+  async function saveMapping(id, rawProduct, setCount, finalProduct, priority){
+    var existing = state.mappings.get(id);
+    // priority omitted (undefined) -> keep whatever it already was;
+    // priority explicitly null -> clear it; a number -> set it.
+    var resolvedPriority = (priority === undefined) ? (existing ? existing.priority : undefined) : priority;
     var data = { rawProduct:rawProduct, setCount:setCount, finalProduct:finalProduct, updatedAt:new Date().toISOString() };
+    if (resolvedPriority !== undefined && resolvedPriority !== null && !isNaN(resolvedPriority)){
+      data.priority = resolvedPriority;
+    }
     state.mappings.set(id, data);
+    renderMgmt();
     renderProcessTab();
     await store.save('mappings', id, data);
   }
+
+  // ---------- flavor priority (같은 상품 안에서 향 표시 순서) ----------
+  async function saveFlavorPriority(id, flavor, priority){
+    var data = { flavor: flavor, priority: priority, updatedAt: new Date().toISOString() };
+    state.flavorPriorities.set(id, data);
+    renderFlavorMgmt();
+    renderProcessTab();
+    await store.save('flavorPriorities', id, data);
+  }
+
+  async function removeFlavorPriority(id){
+    state.flavorPriorities.delete(id);
+    renderFlavorMgmt();
+    renderProcessTab();
+    await store.remove('flavorPriorities', id);
+  }
+
+  function renderFlavorMgmt(){
+    var body = document.getElementById('flavor-mgmt-body');
+    if (!body) return;
+    var entries = Array.from(state.flavorPriorities.entries());
+    entries.sort(function(a,b){
+      return comparePriorityThenName(a[1].priority, a[1].flavor, b[1].priority, b[1].flavor);
+    });
+    document.getElementById('flavor-mgmt-count').textContent = entries.length;
+    body.innerHTML = '';
+    if (!entries.length){
+      body.innerHTML = '<div class="empty">아직 설정된 향 순서가 없습니다. 위에서 향 이름과 순위를 입력해 추가해보세요.</div>';
+      return;
+    }
+    entries.forEach(function(pair){
+      var id = pair[0], f = pair[1];
+      var row = document.createElement('div');
+      row.className = 'flavor-mgmt-row';
+      row.innerHTML =
+        '<div class="raw">' + escapeHtml(f.flavor) + '</div>' +
+        '<input type="number" class="flavor-priority-input" value="' + (f.priority!=null ? escapeAttr(String(f.priority)) : '') + '">' +
+        '<div class="mgmt-actions">' +
+          '<button class="btn sm" data-role="save">저장</button>' +
+          '<button class="btn sm danger" data-role="delete">삭제</button>' +
+        '</div>';
+      var priorityInput = row.querySelector('.flavor-priority-input');
+      var actions = row.querySelector('.mgmt-actions');
+      actions.querySelector('[data-role="save"]').addEventListener('click', function(){
+        var pRaw = priorityInput.value.trim();
+        if (pRaw === '') return;
+        saveFlavorPriority(id, f.flavor, Number(pRaw));
+      });
+      priorityInput.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter') actions.querySelector('[data-role="save"]').click();
+      });
+      actions.querySelector('[data-role="delete"]').addEventListener('click', function(){
+        actions.innerHTML =
+          '<span class="confirm-text">삭제할까요?</span>' +
+          '<button class="btn sm danger" data-role="confirm-yes">예, 삭제</button>' +
+          '<button class="btn sm ghost" data-role="confirm-no">취소</button>';
+        actions.querySelector('[data-role="confirm-yes"]').addEventListener('click', function(){
+          removeFlavorPriority(id);
+        });
+        actions.querySelector('[data-role="confirm-no"]').addEventListener('click', function(){
+          renderFlavorMgmt();
+        });
+      });
+      body.appendChild(row);
+    });
+  }
+
+  document.getElementById('flavor-add-btn').addEventListener('click', function(){
+    var nameInput = document.getElementById('flavor-add-name');
+    var priorityInput = document.getElementById('flavor-add-priority');
+    var name = nameInput.value.trim();
+    var pRaw = priorityInput.value.trim();
+    if (!name || pRaw === '') return;
+    var id = flavorPriorityId(name);
+    saveFlavorPriority(id, name, Number(pRaw));
+    nameInput.value = '';
+    priorityInput.value = '';
+  });
 
   document.getElementById('bulk-save-btn').addEventListener('click', async function(){
     var combos = uniqueCombos();
@@ -847,19 +1013,23 @@
   var lastResultStats = { combos: 0, qty: 0 };
 
   function renderTable(){
-    var grouped = new Map(); // key -> {product, flavor, qty}
+    var grouped = new Map(); // key -> {product, flavor, qty, priority}
     state.rows.forEach(function(r){
       var final = resolveFinalProduct(r.rawProduct, r.setCount);
       if (final == null) return; // still pending, exclude until mapped
       var key = final + ' ' + r.flavor;
-      if (!grouped.has(key)) grouped.set(key, { product: final, flavor: r.flavor, qty: 0 });
-      grouped.get(key).qty += r.qty;
+      var mEntry = state.mappings.get(mappingId(r.rawProduct, r.setCount));
+      var priority = mEntry ? mEntry.priority : undefined;
+      if (!grouped.has(key)) grouped.set(key, { product: final, flavor: r.flavor, qty: 0, priority: priority });
+      var g = grouped.get(key);
+      g.qty += r.qty;
+      if (priorityRank(priority) < priorityRank(g.priority)) g.priority = priority;
     });
     var list = Array.from(grouped.values());
     list.sort(function(a,b){
-      var c = collator.compare(a.product, b.product);
+      var c = comparePriorityThenName(a.priority, a.product, b.priority, b.product);
       if (c !== 0) return c;
-      return collator.compare(a.flavor, b.flavor);
+      return comparePriorityThenName(getFlavorPriority(a.flavor), a.flavor, getFlavorPriority(b.flavor), b.flavor);
     });
 
     var term = state.searchTerm.trim().toLowerCase();
@@ -921,14 +1091,17 @@
 
   function renderMgmt(){
     var body = document.getElementById('mgmt-body');
+    if (!body) return; // not rendered yet
     var entries = Array.from(state.mappings.entries());
     entries.sort(function(a,b){
-      return collator.compare(a[1].rawProduct, b[1].rawProduct) || (a[1].setCount - b[1].setCount);
+      var c = comparePriorityThenName(a[1].priority, a[1].rawProduct, b[1].priority, b[1].rawProduct);
+      if (c !== 0) return c;
+      return a[1].setCount - b[1].setCount;
     });
     document.getElementById('mgmt-count').textContent = entries.length;
     body.innerHTML = '';
     if (!entries.length){
-      body.innerHTML = '<div class="empty">아직 저장된 매핑이 없습니다.</div>';
+      body.innerHTML = '<div class="empty">아직 저장된 매핑이 없습니다. 엑셀을 올리면 자동으로 채워지고, 여기서 바로 추가·수정도 할 수 있어요.</div>';
       return;
     }
     entries.forEach(function(pair){
@@ -938,17 +1111,27 @@
       var rawLabel = m.rawProduct + (m.setCount > 1 ? ' · ' + m.setCount + '개 세트' : '');
       row.innerHTML =
         '<div class="raw">' + escapeHtml(rawLabel) + '</div>' +
-        '<input type="text" value="' + escapeAttr(m.finalProduct) + '">' +
+        '<input type="text" class="mgmt-final" value="' + escapeAttr(m.finalProduct) + '">' +
+        '<input type="number" class="mgmt-priority" placeholder="순위" title="우선조회 순위 (작을수록 먼저 표시, 비우면 마지막)" value="' + (m.priority!=null ? escapeAttr(String(m.priority)) : '') + '">' +
         '<div class="mgmt-actions">' +
           '<button class="btn sm" data-role="save">저장</button>' +
           '<button class="btn sm danger" data-role="delete">삭제</button>' +
         '</div>';
-      var input = row.querySelector('input');
+      var finalInput = row.querySelector('.mgmt-final');
+      var priorityInput = row.querySelector('.mgmt-priority');
       var actions = row.querySelector('.mgmt-actions');
       actions.querySelector('[data-role="save"]').addEventListener('click', function(){
-        var val = input.value.trim();
+        var val = finalInput.value.trim();
         if (!val) return;
-        saveMapping(id, m.rawProduct, m.setCount, val);
+        var pRaw = priorityInput.value.trim();
+        var priority = pRaw === '' ? null : Number(pRaw);
+        saveMapping(id, m.rawProduct, m.setCount, val, priority);
+      });
+      priorityInput.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter') actions.querySelector('[data-role="save"]').click();
+      });
+      finalInput.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter') actions.querySelector('[data-role="save"]').click();
       });
       actions.querySelector('[data-role="delete"]').addEventListener('click', function(){
         actions.innerHTML =
@@ -957,6 +1140,7 @@
           '<button class="btn sm ghost" data-role="confirm-no">취소</button>';
         actions.querySelector('[data-role="confirm-yes"]').addEventListener('click', async function(){
           state.mappings.delete(id);
+          renderMgmt();
           renderProcessTab();
           await store.remove('mappings', id);
         });
