@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg:#f6f6f1;
@@ -100,6 +101,41 @@
   .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-dim);flex:none;}
   .dot.on{background:var(--accent);}
   .dot.off{background:var(--danger);}
+
+  .account-info{display:inline-flex;align-items:center;gap:8px;}
+  .account-sep{color:var(--border);}
+  .account-logout{
+    appearance:none;border:none;background:none;font:inherit;font-size:12.5px;font-weight:700;
+    color:var(--ink-dim);cursor:pointer;text-decoration:underline;padding:0;
+  }
+  .account-logout:hover{color:var(--ink);}
+
+  /* ---- Auth gate ---- */
+  .auth-gate{
+    position:fixed;inset:0;z-index:100;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--bg);padding:20px;
+  }
+  .auth-card{
+    width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);
+    border-radius:16px;box-shadow:var(--shadow);padding:28px 26px 26px;
+  }
+  .auth-title{font-size:22px;font-weight:900;margin:10px 0 4px;letter-spacing:-.01em;}
+  .auth-sub{font-size:13px;color:var(--ink-dim);margin:0 0 20px;}
+  .auth-form{display:flex;flex-direction:column;gap:12px;}
+  .auth-form label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;font-weight:700;color:var(--ink-dim);}
+  .auth-form input{
+    font:inherit;font-size:14px;padding:10px 12px;border-radius:9px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+  }
+  .auth-form input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  .auth-error{font-size:12.5px;color:var(--danger);font-weight:700;min-height:1px;}
+  .auth-submit{width:100%;padding:11px 0;font-size:14px;margin-top:2px;}
+  .auth-switch{
+    margin:18px 0 0;text-align:center;font-size:12.5px;color:var(--ink-dim);
+  }
+  .auth-switch a{color:var(--accent);font-weight:700;text-decoration:none;}
+  .auth-switch a:hover{text-decoration:underline;}
 
   .card{
     background:var(--surface);border:1px solid var(--border);border-radius:14px;
@@ -391,7 +427,44 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div class="auth-gate" id="auth-gate" hidden>
+
+  <div class="auth-card" id="auth-login-screen">
+    <span class="eyebrow">📦 허브앤리빙 출고 준비</span>
+    <h1 class="auth-title">로그인</h1>
+    <p class="auth-sub">이카운트 출고 정리 도구를 쓰려면 로그인해주세요.</p>
+
+    <form class="auth-form" id="auth-login-form">
+      <label>아이디<input type="text" id="login-id" autocomplete="username" required></label>
+      <label>비밀번호<input type="password" id="login-pw" autocomplete="current-password" required></label>
+      <div class="auth-error" id="login-error"></div>
+      <button type="submit" class="btn primary auth-submit" id="login-submit-btn">로그인</button>
+    </form>
+
+    <p class="auth-switch">계정이 없으신가요? <a href="#" id="go-signup-link">회원가입</a></p>
+  </div>
+
+  <div class="auth-card" id="auth-signup-screen" hidden>
+    <span class="eyebrow">📦 허브앤리빙 출고 준비</span>
+    <h1 class="auth-title">회원가입</h1>
+    <p class="auth-sub">회사명·아이디·비밀번호를 입력해 계정을 만드세요.</p>
+
+    <form class="auth-form" id="auth-signup-form">
+      <label>회사명<input type="text" id="signup-company" autocomplete="organization" required></label>
+      <label>아이디<input type="text" id="signup-id" autocomplete="username" required></label>
+      <label>비밀번호<input type="password" id="signup-pw" autocomplete="new-password" required></label>
+      <label>비밀번호 확인<input type="password" id="signup-pw2" autocomplete="new-password" required></label>
+      <div class="auth-error" id="signup-error"></div>
+      <button type="submit" class="btn primary auth-submit" id="signup-submit-btn">회원가입</button>
+    </form>
+
+    <p class="auth-switch">이미 계정이 있으신가요? <a href="#" id="go-login-link">로그인</a></p>
+  </div>
+
+</div>
+
+<div class="wrap" id="app-wrap" hidden>
 
   <header class="page">
     <span class="eyebrow">📦 허브앤리빙 출고 준비</span>
@@ -400,6 +473,11 @@
     <div class="status-row">
       <span class="dot" id="db-dot"></span>
       <span id="db-status">서버 연결 확인 중…</span>
+      <span class="account-info" id="account-info" hidden>
+        <span class="account-sep">·</span>
+        <span id="account-label"></span>
+        <button type="button" class="account-logout" id="logout-btn">로그아웃</button>
+      </span>
     </div>
   </header>
 
@@ -573,6 +651,9 @@
   // ---------- state ----------
   var state = {
     db: null,
+    auth: null,
+    user: null,           // {uid, companyName, loginId} once signed in
+    subscribed: false,    // whether Firestore listeners are currently active
     mappings: new Map(),  // id -> {rawProduct, setCount, finalProduct, updatedAt}
     flavorPriorities: new Map(), // id -> {flavor, priority, updatedAt}
     logs: new Map(),      // 'YYYY-MM-DD' -> {date, completed, completedAt, combos, qty}
@@ -582,6 +663,8 @@
     calMonth: (new Date()).getMonth()
   };
   var LS_PREFIX = "ecount_outbound_";
+  var AUTH_EMAIL_DOMAIN = "@hnl-ecount-outbound.local"; // synthetic domain; 아이디를 Firebase Auth 이메일 형식으로 변환하는 용도일 뿐, 실제 메일은 오가지 않음
+  var unsubscribeFns = [];
   var collator = new Intl.Collator('ko-KR');
 
   // ---------- mapping priority (lower number = shown first; unset sorts last) ----------
@@ -713,31 +796,191 @@
     }
   };
 
-  // ---------- init (Firebase) ----------
+  // ---------- init (Firebase + auth) ----------
   async function initStore(){
     var dot = document.getElementById('db-dot');
     var statusEl = document.getElementById('db-status');
     try{
       firebase.initializeApp(firebaseConfig);
       state.db = firebase.firestore();
+      state.auth = firebase.auth();
       dot.className = 'dot on';
       statusEl.textContent = '매핑·출고 기록이 모든 기기에서 공유되어 자동 저장됩니다';
-      store.subscribe('mappings', function(map){ state.mappings = map; renderProcessTab(); renderMgmt(); renderCalendar(); });
-      store.subscribe('flavorPriorities', function(map){ state.flavorPriorities = map; renderProcessTab(); renderFlavorMgmt(); });
-      store.subscribe('logs', function(map){ state.logs = map; renderCalendar(); });
-      renderCalendar();
+      wireAuthForms();
+      state.auth.onAuthStateChanged(handleAuthChange);
       return;
     }catch(e){
       console.error('Firebase 초기화 실패', e);
     }
+    // no backend available -> skip login entirely, use this browser only
     dot.className = 'dot off';
     statusEl.textContent = '서버 연결에 실패해 이 브라우저에만 임시 저장됩니다';
+    document.getElementById('auth-gate').hidden = true;
+    document.getElementById('app-wrap').hidden = false;
     state.mappings = lsLoadAll('mappings');
     state.flavorPriorities = lsLoadAll('flavorPriorities');
     state.logs = lsLoadAll('logs');
     renderMgmt();
     renderFlavorMgmt();
     renderCalendar();
+  }
+
+  function startDataSubscriptions(){
+    if (state.subscribed) return;
+    state.subscribed = true;
+    unsubscribeFns.push(store.subscribe('mappings', function(map){ state.mappings = map; renderProcessTab(); renderMgmt(); renderCalendar(); }));
+    unsubscribeFns.push(store.subscribe('flavorPriorities', function(map){ state.flavorPriorities = map; renderProcessTab(); renderFlavorMgmt(); }));
+    unsubscribeFns.push(store.subscribe('logs', function(map){ state.logs = map; renderCalendar(); }));
+    renderCalendar();
+  }
+
+  function stopDataSubscriptions(){
+    unsubscribeFns.forEach(function(fn){ try{ fn(); }catch(e){} });
+    unsubscribeFns = [];
+    state.subscribed = false;
+    // clear in-memory data so nothing from the previous account lingers on a shared device
+    state.mappings = new Map();
+    state.flavorPriorities = new Map();
+    state.logs = new Map();
+    state.rows = [];
+    var fileInput = document.getElementById('file-input');
+    if (fileInput) fileInput.value = '';
+    var filerow = document.getElementById('filerow');
+    if (filerow) filerow.style.display = 'none';
+    var results = document.getElementById('results');
+    if (results) results.style.display = 'none';
+    renderMgmt();
+    renderFlavorMgmt();
+  }
+
+  // ---------- auth: sign up / log in / log out ----------
+  function idToEmail(id){
+    var clean = String(id).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    return clean + AUTH_EMAIL_DOMAIN;
+  }
+
+  function authErrorMessage(err){
+    switch (err && err.code){
+      case 'auth/email-already-in-use': return '이미 사용 중인 아이디입니다.';
+      case 'auth/invalid-email': return '아이디에 사용할 수 없는 문자가 있습니다. (영문/숫자 권장)';
+      case 'auth/weak-password': return '비밀번호는 6자 이상이어야 합니다.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': return '아이디 또는 비밀번호가 올바르지 않습니다.';
+      case 'auth/too-many-requests': return '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      default: return '문제가 발생했습니다. 다시 시도해주세요.';
+    }
+  }
+
+  async function handleAuthChange(user){
+    var accountInfo = document.getElementById('account-info');
+    var accountLabel = document.getElementById('account-label');
+    var authGate = document.getElementById('auth-gate');
+    var appWrap = document.getElementById('app-wrap');
+
+    if (user){
+      state.user = { uid: user.uid, companyName: '', loginId: '' };
+      try{
+        var doc = await state.db.collection('users').doc(user.uid).get();
+        if (doc.exists){
+          var profile = doc.data();
+          state.user.companyName = profile.companyName || '';
+          state.user.loginId = profile.loginId || '';
+        }
+      }catch(e){ /* profile lookup best-effort */ }
+
+      accountLabel.textContent = (state.user.companyName ? state.user.companyName + ' · ' : '') + (state.user.loginId || '');
+      accountInfo.hidden = false;
+      authGate.hidden = true;
+      appWrap.hidden = false;
+      startDataSubscriptions();
+    } else {
+      state.user = null;
+      accountInfo.hidden = true;
+      appWrap.hidden = true;
+      authGate.hidden = false;
+      // always land back on the login screen, not wherever the gate was left
+      var loginScreen = document.getElementById('auth-login-screen');
+      var signupScreen = document.getElementById('auth-signup-screen');
+      if (loginScreen && signupScreen){ loginScreen.hidden = false; signupScreen.hidden = true; }
+      stopDataSubscriptions();
+    }
+  }
+
+  function wireAuthForms(){
+    var loginForm = document.getElementById('auth-login-form');
+    var signupForm = document.getElementById('auth-signup-form');
+    var loginScreen = document.getElementById('auth-login-screen');
+    var signupScreen = document.getElementById('auth-signup-screen');
+
+    function showLoginScreen(){
+      loginScreen.hidden = false;
+      signupScreen.hidden = true;
+      document.getElementById('login-error').textContent = '';
+      document.getElementById('signup-error').textContent = '';
+    }
+    function showSignupScreen(){
+      loginScreen.hidden = true;
+      signupScreen.hidden = false;
+      document.getElementById('login-error').textContent = '';
+      document.getElementById('signup-error').textContent = '';
+    }
+    document.getElementById('go-signup-link').addEventListener('click', function(ev){
+      ev.preventDefault();
+      showSignupScreen();
+    });
+    document.getElementById('go-login-link').addEventListener('click', function(ev){
+      ev.preventDefault();
+      showLoginScreen();
+    });
+
+    loginForm.addEventListener('submit', async function(ev){
+      ev.preventDefault();
+      var errorEl = document.getElementById('login-error');
+      errorEl.textContent = '';
+      var id = document.getElementById('login-id').value.trim();
+      var pw = document.getElementById('login-pw').value;
+      if (!id || !pw){ errorEl.textContent = '아이디와 비밀번호를 입력해주세요.'; return; }
+      var btn = document.getElementById('login-submit-btn');
+      btn.disabled = true;
+      try{
+        await state.auth.signInWithEmailAndPassword(idToEmail(id), pw);
+      }catch(e){
+        errorEl.textContent = authErrorMessage(e);
+      }
+      btn.disabled = false;
+    });
+
+    signupForm.addEventListener('submit', async function(ev){
+      ev.preventDefault();
+      var errorEl = document.getElementById('signup-error');
+      errorEl.textContent = '';
+      var company = document.getElementById('signup-company').value.trim();
+      var id = document.getElementById('signup-id').value.trim();
+      var pw = document.getElementById('signup-pw').value;
+      var pw2 = document.getElementById('signup-pw2').value;
+      if (!company || !id || !pw || !pw2){ errorEl.textContent = '모든 항목을 입력해주세요.'; return; }
+      if (pw !== pw2){ errorEl.textContent = '비밀번호가 일치하지 않습니다.'; return; }
+      if (pw.length < 6){ errorEl.textContent = '비밀번호는 6자 이상이어야 합니다.'; return; }
+      var btn = document.getElementById('signup-submit-btn');
+      btn.disabled = true;
+      try{
+        var cred = await state.auth.createUserWithEmailAndPassword(idToEmail(id), pw);
+        await state.db.collection('users').doc(cred.user.uid).set({
+          companyName: company,
+          loginId: id,
+          createdAt: new Date().toISOString()
+        });
+        try{ await cred.user.updateProfile({ displayName: company }); }catch(e){}
+      }catch(e){
+        errorEl.textContent = authErrorMessage(e);
+      }
+      btn.disabled = false;
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', function(){
+      state.auth.signOut();
+    });
   }
 
   // ---------- parsing ----------
