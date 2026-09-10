@@ -753,6 +753,31 @@
     }catch(e){}
   }
 
+  // ---------- save-failure feedback ----------
+  // Firestore writes were previously failing silently and falling back to a
+  // browser-only localStorage copy that the next server snapshot would just
+  // overwrite - so an edit could look saved, then quietly disappear on refresh.
+  // This makes a real write failure visible instead of hiding it.
+  function flashSaveError(){
+    var statusEl = document.getElementById('db-status');
+    var dot = document.getElementById('db-dot');
+    if (!statusEl) return;
+    if (flashSaveError._t){ clearTimeout(flashSaveError._t); }
+    else {
+      flashSaveError._prevText = statusEl.textContent;
+      flashSaveError._prevDotClass = dot ? dot.className : '';
+    }
+    statusEl.textContent = '저장 실패 - 인터넷 연결을 확인하고 다시 시도해주세요';
+    statusEl.style.color = 'var(--danger)';
+    if (dot) dot.className = 'dot off';
+    flashSaveError._t = setTimeout(function(){
+      statusEl.textContent = flashSaveError._prevText;
+      statusEl.style.color = '';
+      if (dot) dot.className = flashSaveError._prevDotClass;
+      flashSaveError._t = null;
+    }, 5000);
+  }
+
   // ---------- store abstraction (db capability, falls back to localStorage) ----------
   var store = {
     async loadAll(collection){
@@ -766,21 +791,47 @@
       }
       return lsLoadAll(collection);
     },
+    // returns true when the write is durably saved (Firestore, or genuinely no
+    // backend at all so localStorage IS the store); false means it only made it
+    // into a browser-only copy that a future server snapshot will discard, so
+    // callers should warn the user rather than treat this as a success.
     async save(collection, id, data){
       if (state.db){
-        try{ await state.db.doc(collection+'/'+id).set(data); return; }catch(e){}
+        try{
+          await state.db.doc(collection+'/'+id).set(data);
+          return true;
+        }catch(e){
+          console.error('Firestore 저장 실패', collection, id, e);
+          flashSaveError();
+          var all = lsLoadAll(collection);
+          all.set(id, data);
+          lsSaveAll(collection, all);
+          return false;
+        }
       }
       var all = lsLoadAll(collection);
       all.set(id, data);
       lsSaveAll(collection, all);
+      return true;
     },
     async remove(collection, id){
       if (state.db){
-        try{ await state.db.doc(collection+'/'+id).delete(); return; }catch(e){}
+        try{
+          await state.db.doc(collection+'/'+id).delete();
+          return true;
+        }catch(e){
+          console.error('Firestore 삭제 실패', collection, id, e);
+          flashSaveError();
+          var all = lsLoadAll(collection);
+          all.delete(id);
+          lsSaveAll(collection, all);
+          return false;
+        }
       }
       var all = lsLoadAll(collection);
       all.delete(id);
       lsSaveAll(collection, all);
+      return true;
     },
     subscribe(collection, onChange){
       if (state.db){
@@ -804,6 +855,16 @@
       firebase.initializeApp(firebaseConfig);
       state.db = firebase.firestore();
       state.auth = firebase.auth();
+      // Persist Firestore's local cache (incl. any not-yet-confirmed writes) to
+      // IndexedDB so a page refresh - or a brief connection drop right after
+      // saving - doesn't lose an edit or show an older value than what was
+      // just typed in. Without this, a save that hasn't finished reaching the
+      // server yet is only held in memory and vanishes on refresh.
+      try{
+        await state.db.enablePersistence({ synchronizeTabs: true });
+      }catch(persistErr){
+        console.warn('오프라인 캐시(IndexedDB) 사용 불가 - 저장 직후 새로고침하면 값이 되돌아갈 수 있습니다', persistErr);
+      }
       dot.className = 'dot on';
       statusEl.textContent = '매핑·출고 기록이 모든 기기에서 공유되어 자동 저장됩니다';
       wireAuthForms();
@@ -1044,6 +1105,23 @@
     reader.readAsArrayBuffer(file);
   }
 
+  // ---------- known name differences: 주문서의 원본 상품명 -> 이카운트 정식 품목명 ----------
+  // 판매 채널 상품명이 이카운트 품목명과 다르게 등록된 경우를 여기 추가하면
+  // 1개입 상품은 자동으로, 세트 상품은 "제안값"으로 바로 반영됩니다.
+  var KNOWN_PRODUCT_SYNONYMS = [
+    { from: '프래그런스오일', to: '스톤 디퓨저 오일' },
+    { from: '프래그런스 오일', to: '스톤 디퓨저 오일' }
+  ];
+  function applyKnownSynonyms(name){
+    var result = name;
+    KNOWN_PRODUCT_SYNONYMS.forEach(function(s){
+      if (result.indexOf(s.from) !== -1){
+        result = result.split(s.from).join(s.to);
+      }
+    });
+    return result;
+  }
+
   // auto-seed mappings for setCount===1 combos that have no mapping yet
   async function seedDefaultMappings(){
     var combos = uniqueCombos();
@@ -1052,7 +1130,7 @@
       if (c.setCount === 1){
         var id = mappingId(c.rawProduct, c.setCount);
         if (!state.mappings.has(id)){
-          var data = { rawProduct:c.rawProduct, setCount:1, finalProduct:c.rawProduct, updatedAt:new Date().toISOString() };
+          var data = { rawProduct:c.rawProduct, setCount:1, finalProduct:applyKnownSynonyms(c.rawProduct), updatedAt:new Date().toISOString() };
           state.mappings.set(id, data); // optimistic
           toSave.push(store.save('mappings', id, data));
         }
@@ -1112,7 +1190,7 @@
     list.innerHTML = '';
     pending.forEach(function(c){
       var id = mappingId(c.rawProduct, c.setCount);
-      var suggested = c.rawProduct + ' ' + c.setCount + '개입';
+      var suggested = applyKnownSynonyms(c.rawProduct) + ' ' + c.setCount + '개입';
       var row = document.createElement('div');
       row.className = 'pending-item';
       row.innerHTML =
