@@ -661,7 +661,8 @@
     rows: [],
     searchTerm: "",
     calYear: (new Date()).getFullYear(),
-    calMonth: (new Date()).getMonth()
+    calMonth: (new Date()).getMonth(),
+    seenNonEmpty: {} // collection -> true once we've observed real documents in it this session
   };
   var LS_PREFIX = "ecount_outbound_";
   var AUTH_EMAIL_DOMAIN = "@hnl-ecount-outbound.local"; // synthetic domain; 아이디를 Firebase Auth 이메일 형식으로 변환하는 용도일 뿐, 실제 메일은 오가지 않음
@@ -755,28 +756,59 @@
   }
 
   // ---------- save-failure feedback ----------
-  // Firestore writes were previously failing silently and falling back to a
-  // browser-only localStorage copy that the next server snapshot would just
-  // overwrite - so an edit could look saved, then quietly disappear on refresh.
-  // This makes a real write failure visible instead of hiding it.
-  function flashSaveError(){
+  // Firestore writes/reads were previously failing silently and falling back to
+  // a browser-only localStorage copy (or just being ignored) that the next
+  // server snapshot would overwrite - so an edit, or even a whole dataset,
+  // could look fine on screen and then quietly disappear later with no warning.
+  // db-status is now a sticky health indicator: once it shows a problem it
+  // STAYS (through this page load) rather than auto-clearing after a few
+  // seconds or as soon as some unrelated read/write happens to succeed - a
+  // reload re-runs the checks, but nothing here silently waves the warning
+  // away, so a real, ongoing problem can't be missed just because nobody was
+  // looking in the few seconds after it started.
+  var DB_DEFAULT_STATUS = '매핑·출고 기록이 모든 기기에서 공유되어 자동 저장됩니다';
+  function setDbStatus(ok, message){
     var statusEl = document.getElementById('db-status');
     var dot = document.getElementById('db-dot');
     if (!statusEl) return;
-    if (flashSaveError._t){ clearTimeout(flashSaveError._t); }
-    else {
-      flashSaveError._prevText = statusEl.textContent;
-      flashSaveError._prevDotClass = dot ? dot.className : '';
-    }
-    statusEl.textContent = '저장 실패 - 인터넷 연결을 확인하고 다시 시도해주세요';
-    statusEl.style.color = 'var(--danger)';
-    if (dot) dot.className = 'dot off';
-    flashSaveError._t = setTimeout(function(){
-      statusEl.textContent = flashSaveError._prevText;
+    if (ok){
+      statusEl.textContent = message || DB_DEFAULT_STATUS;
       statusEl.style.color = '';
-      if (dot) dot.className = flashSaveError._prevDotClass;
-      flashSaveError._t = null;
-    }, 5000);
+      if (dot) dot.className = 'dot on';
+    } else {
+      statusEl.textContent = message;
+      statusEl.style.color = 'var(--danger)';
+      if (dot) dot.className = 'dot off';
+    }
+  }
+  function flashSaveError(){
+    setDbStatus(false, '저장 실패 - 이 편집은 서버에 반영되지 않았습니다. 인터넷 연결을 확인하고 다시 시도해주세요 (이 문구는 저장에 성공할 때까지 계속 표시됩니다)');
+  }
+  function flashSyncError(){
+    setDbStatus(false, '서버와 연결이 끊겼습니다 - 화면 내용이 최신이 아닐 수 있습니다. 새로고침하지 말고 인터넷 연결을 확인해주세요');
+  }
+  // Called whenever a snapshot for `collection` arrives. If we've already seen
+  // real documents in this collection this session and a later snapshot comes
+  // back empty, that's exactly the shape of a silent data-loss event (server
+  // state unexpectedly wiped, or a broken read masquerading as "no data") -
+  // flag it loudly instead of quietly rendering an empty list as if nothing
+  // that used to exist ever did.
+  function checkForUnexpectedEmptySnapshot(collection, map, label){
+    // Persisted per-browser (not per Firestore doc) so this catches not only
+    // "it emptied out while I was watching" but also "it was already empty
+    // the moment this device loaded it, even though this same device saw it
+    // full last time" - the exact way last time's data loss was discovered.
+    var everHadDataKey = LS_PREFIX + 'everHadData_' + collection;
+    if (map.size > 0){
+      state.seenNonEmpty[collection] = true;
+      try{ localStorage.setItem(everHadDataKey, '1'); }catch(e){}
+      return;
+    }
+    var hadDataBefore = state.seenNonEmpty[collection];
+    try{ hadDataBefore = hadDataBefore || localStorage.getItem(everHadDataKey) === '1'; }catch(e){}
+    if (hadDataBefore){
+      setDbStatus(false, label + ' 데이터가 갑자기 비어서 서버에서 내려왔습니다 - 새로고침하지 말고 스크린샷을 남긴 뒤 문의해주세요');
+    }
   }
 
   // ---------- store abstraction (db capability, falls back to localStorage) ----------
@@ -841,7 +873,13 @@
             var map = new Map();
             snap.docs.forEach(function(d){ if(d.exists) map.set(d.id, d.data()); });
             onChange(map);
-          }, function(){ /* keep last known state on transient errors */ });
+          }, function(err){
+            // Previously silent ("keep last known state") - but a silent failure
+            // here is indistinguishable on screen from everything being fine,
+            // which is exactly how last time's data loss went unnoticed.
+            console.error('Firestore 구독 실패', collection, err);
+            flashSyncError();
+          });
         }catch(e){ return function(){}; }
       }
       return function(){};
@@ -890,9 +928,9 @@
   function startDataSubscriptions(){
     if (state.subscribed) return;
     state.subscribed = true;
-    unsubscribeFns.push(store.subscribe('mappings', function(map){ state.mappings = map; renderProcessTab(); renderMgmt(); renderCalendar(); }));
-    unsubscribeFns.push(store.subscribe('flavorPriorities', function(map){ state.flavorPriorities = map; renderProcessTab(); renderFlavorMgmt(); }));
-    unsubscribeFns.push(store.subscribe('logs', function(map){ state.logs = map; renderCalendar(); }));
+    unsubscribeFns.push(store.subscribe('mappings', function(map){ checkForUnexpectedEmptySnapshot('mappings', map, '상품명 매핑'); state.mappings = map; renderProcessTab(); renderMgmt(); renderCalendar(); }));
+    unsubscribeFns.push(store.subscribe('flavorPriorities', function(map){ checkForUnexpectedEmptySnapshot('flavorPriorities', map, '향 우선순위'); state.flavorPriorities = map; renderProcessTab(); renderFlavorMgmt(); }));
+    unsubscribeFns.push(store.subscribe('logs', function(map){ checkForUnexpectedEmptySnapshot('logs', map, '출고 기록'); state.logs = map; renderCalendar(); }));
     renderCalendar();
   }
 
